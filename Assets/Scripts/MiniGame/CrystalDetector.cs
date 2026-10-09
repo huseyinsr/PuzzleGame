@@ -1,27 +1,27 @@
-using UnityEngine;
 using System;
+using UnityEngine;
 
 public class CrystalDetector : MonoBehaviour
 {
-    [SerializeField] GameObject greenLights;
-    [SerializeField] GameObject redLights;
+    public static event Action OnPlaced;
 
-    public event Action OnCrystalDetected;
+    public static bool IsPlaced { get; private set; }
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetState()
     {
-        greenLights.SetActive(false);
+        IsPlaced = false;
+        OnPlaced = null;
     }
 
-    private void OnTriggerStay(Collider other)
+    private void Start()
     {
-        if (other.CompareTag("Crystal"))
+        if (IsPlaced)
         {
-            greenLights.SetActive(true);
-            redLights.SetActive(false);
-
-            OnCrystalDetected?.Invoke();
+            return;
         }
+
+        IsPlaced = true;
+        OnPlaced?.Invoke();
     }
 }

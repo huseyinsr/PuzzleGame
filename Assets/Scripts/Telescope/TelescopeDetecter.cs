@@ -1,17 +1,27 @@
+using System;
 using UnityEngine;
 
 public class TelescopeDetecter : MonoBehaviour
 {
-    [SerializeField] private GameObject cameraPlace;
+    public static event Action OnPlaced;
 
-    private void OnTriggerEnter(Collider other)
+    public static bool IsPlaced { get; private set; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetState()
     {
-        if (other.CompareTag("Telescope"))
-        {
-            Destroy(cameraPlace);
-            ZoomManager.Instance.ExitZoom();
-            //Debug.Log("Telescope detected, camera place destroyed and zoom exited.");
-        }
+        IsPlaced = false;
+        OnPlaced = null;
     }
 
+    private void Start()
+    {
+        if (IsPlaced)
+        {
+            return;
+        }
+
+        IsPlaced = true;
+        OnPlaced?.Invoke();
+    }
 }

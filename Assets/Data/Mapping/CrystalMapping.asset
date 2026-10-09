@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: CrystalMapping
   m_EditorClassIdentifier: 
   item: {fileID: 11400000, guid: dbab62f6eb1794b46814cb12895fa8a0, type: 2}
-  prefab: {fileID: 420750469897428743, guid: 2b5695ccfc20ae542b120fa0c8c8ccb3, type: 3}
+  prefab: {fileID: 611141179300974209, guid: f8c0373e1d18fb549a6ec536bf134043, type: 3}

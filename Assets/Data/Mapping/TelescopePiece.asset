@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: TelescopePiece
   m_EditorClassIdentifier: 
   item: {fileID: 11400000, guid: 5c2d3164d3ff8e6438770badcaed04ff, type: 2}
-  prefab: {fileID: 1685858692856851785, guid: b2bafe520fe4e634795ac560200ce012, type: 3}
+  prefab: {fileID: 7632916457323975436, guid: b2bafe520fe4e634795ac560200ce012, type: 3}

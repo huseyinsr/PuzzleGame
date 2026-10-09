@@ -1,203 +1,520 @@
-using System.Diagnostics;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
-using UnityEngine.UIElements;
+using UnityEngine.InputSystem;
 
 public class MiniGame : MonoBehaviour
 {
-    [SerializeField] private GameObject CrystalPoint;
-    [SerializeField] private GameObject rocket;
-    [SerializeField] private GameObject miniGamePanel;
-    [SerializeField] private GameObject notDetected;
-    [SerializeField] private GameObject Ways;
-
-    [SerializeField] private float WaysNormalVerticalSpeed = 100f;
-    [SerializeField] private float WaysFastVerticalSpeed = 250f;
-    [SerializeField] private float stepDistance = 50f;
-    [SerializeField] private float horizontalSmoothTime = 0.1f;
-    [SerializeField] private float fastDuration = 1f;
-    [SerializeField] private float minZoomTime = 0.2f;
-    [SerializeField] private bool requiresZoom = true;
-
-    [SerializeField] private int requiredTrueWallCount = 1;
-    private int currentTrueWallCount = 0;
-
-    [SerializeField] private float normalShakeMagnitude = 3f;
-    [SerializeField] private float fastShakeMagnitude = 5f;
-    [SerializeField] private float normalShakeSpeed = 2f;
-    [SerializeField] private float fastShakeSpeed = 4f;
-
-    private bool isCrtystalDetected = false;
-    private bool GameIsActive = false;
-    private Vector3 waysStartPosition;
-    private Vector3 rocketStartPosition;
-
-    private float currentVerticalSpeed;
-    private float noiseTimer = 0f;
-    private float fastTimer = 0f;
-    private bool isFastActive = false;
-
-    private float targetHorizontalPos;
-    private float horizontalVelocity = 0f;
-
-    void Start()
+    [Serializable]
+    private class Level
     {
-        miniGamePanel.SetActive(false);
+        [SerializeField] private GameObject level;
+        [SerializeField] private Transform spawnPoint;
+        [SerializeField] private Transform obstacles;
+        [SerializeField] private Collider winArea;
 
-        if (Ways != null)
-        {
-            waysStartPosition = Ways.transform.position;
-            targetHorizontalPos = waysStartPosition.x;
-        }
+        public GameObject LevelObject => level;
+        public Transform SpawnPoint => spawnPoint;
+        public Transform Obstacles => obstacles;
+        public Collider WinArea => winArea;
+    }
+
+    [Header("Game")]
+    [SerializeField] private Rocket rocket;
+    [SerializeField] private GameObject game;
+    [SerializeField] private TMP_Text levelText;
+
+    [Header("Crystal")]
+    [SerializeField] private GameObject[] crystalOn;
+    [SerializeField] private GameObject[] crystalOff;
+
+    [Header("Telescope")]
+    [SerializeField] private GameObject[] telescopeOn;
+    [SerializeField] private GameObject[] telescopeOff;
+
+    [Header("Levels")]
+    [SerializeField] private List<Level> levels = new();
+
+    [Header("Buttons")]
+    [SerializeField] private Collider leftButton;
+    [SerializeField] private Collider rightButton;
+    [SerializeField] private Collider forwardButton;
+
+    [SerializeField] private Camera gameCamera;
+    [SerializeField] private float buttonDistance = 10f;
+
+    [Header("Button Hover")]
+    [SerializeField] private float hoverSize = 1.08f;
+    [SerializeField] private float hoverSpeed = 10f;
+
+    [Header("Button Click")]
+    [SerializeField] private float clickSize = 0.9f;
+    [SerializeField] private float clickDepth = 0.01f;
+    [SerializeField] private float clickTime = 0.1f;
+    [SerializeField] private float clickSpeed = 15f;
+
+    [Header("Zoom")]
+    [SerializeField] private bool needsZoom = true;
+    [SerializeField] private float zoomDelay = 0.15f;
+
+    private readonly Dictionary<Collider, Vector3> buttonSizes = new();
+    private readonly Dictionary<Collider, Vector3> buttonPositions = new();
+
+    private bool crystalReady;
+    private bool telescopeReady;
+    private bool gameStarted;
+    private bool gameFinished;
+
+    private int currentLevel;
+
+    private Collider hoverButton;
+    private Collider clickedButton;
+
+    private void OnEnable()
+    {
+        CrystalDetector.OnPlaced += CrystalPlaced;
+        TelescopeDetecter.OnPlaced += TelescopePlaced;
 
         if (rocket != null)
         {
-            rocketStartPosition = rocket.transform.position;
-        }
-
-        currentVerticalSpeed = WaysNormalVerticalSpeed;
-
-        Rocket rocketScript = rocket.GetComponent<Rocket>();
-        if (rocketScript != null)
-        {
-            rocketScript.OnMiniGameWallDetected += OnMiniGameWallDetected;
-            rocketScript.OnTrueWallDetected += OnTrueWallDetected;
+            rocket.OnColliderEntered += RocketHit;
         }
     }
 
-    void Update()
+    private void OnDisable()
     {
-        CrystalPoint = GameObject.Find("CrystalPoint");
-        CrystalDetector crystalDetector = CrystalPoint.GetComponent<CrystalDetector>();
+        CrystalDetector.OnPlaced -= CrystalPlaced;
+        TelescopeDetecter.OnPlaced -= TelescopePlaced;
 
-        if (crystalDetector != null)
+        if (rocket != null)
         {
-            crystalDetector.OnCrystalDetected += Crystal;
+            rocket.OnColliderEntered -= RocketHit;
+        }
+    }
+
+    private void Start()
+    {
+        if (gameCamera == null)
+        {
+            gameCamera = Camera.main;
         }
 
-        if (isCrtystalDetected == true)
-        {
-            notDetected.SetActive(false);
-            if (!GameIsActive) return;
+        SaveButton(leftButton);
+        SaveButton(rightButton);
+        SaveButton(forwardButton);
 
-            if (isFastActive)
+        crystalReady = CrystalDetector.IsPlaced;
+        telescopeReady = TelescopeDetecter.IsPlaced;
+
+        UpdateItems();
+
+        if (!BothItemsReady())
+        {
+            if (game != null)
             {
-                fastTimer -= Time.deltaTime;
-                if (fastTimer <= 0f)
-                {
-                    isFastActive = false;
-                    currentVerticalSpeed = WaysNormalVerticalSpeed;
-                }
+                game.SetActive(false);
+            }
+        }
+        else
+        {
+            StartGame();
+        }
+    }
+
+    private void Update()
+    {
+        bool zoomReady = ZoomReady();
+
+        bool canPlay =
+            BothItemsReady() &&
+            gameStarted &&
+            !gameFinished &&
+            zoomReady;
+
+        if (rocket != null)
+        {
+            rocket.SetControlEnabled(canPlay);
+        }
+
+        hoverButton = zoomReady ? FindButton() : null;
+
+        if (zoomReady &&
+            Mouse.current != null &&
+            Mouse.current.leftButton.wasPressedThisFrame &&
+            hoverButton != null)
+        {
+            ButtonClicked(hoverButton, canPlay);
+        }
+
+        AnimateButton(leftButton);
+        AnimateButton(rightButton);
+        AnimateButton(forwardButton);
+    }
+
+    private void CrystalPlaced()
+    {
+        crystalReady = true;
+
+        UpdateItems();
+        TryStartGame();
+    }
+
+    private void TelescopePlaced()
+    {
+        telescopeReady = true;
+
+        UpdateItems();
+        TryStartGame();
+    }
+
+    private void TryStartGame()
+    {
+        if (!gameStarted && BothItemsReady())
+        {
+            StartGame();
+        }
+    }
+
+    private void StartGame()
+    {
+        if (levels.Count == 0)
+        {
+            return;
+        }
+
+        gameStarted = true;
+        gameFinished = false;
+
+        if (game != null)
+        {
+            game.SetActive(true);
+        }
+
+        SetLevel(0);
+    }
+
+    private void UpdateItems()
+    {
+        HashSet<GameObject> sharedObjects = new();
+
+        foreach (GameObject obj in crystalOn)
+        {
+            if (obj != null && ContainsObject(telescopeOn, obj))
+            {
+                obj.SetActive(crystalReady && telescopeReady);
+                sharedObjects.Add(obj);
+            }
+        }
+
+        foreach (GameObject obj in crystalOff)
+        {
+            if (obj != null && ContainsObject(telescopeOff, obj))
+            {
+                obj.SetActive(!crystalReady || !telescopeReady);
+                sharedObjects.Add(obj);
             }
 
-            float currentX = Mathf.SmoothDamp(Ways.transform.position.x, targetHorizontalPos, ref horizontalVelocity, horizontalSmoothTime);
-            float currentY = Ways.transform.position.y - (currentVerticalSpeed * Time.deltaTime);
+        SetObjects(crystalOn, crystalReady, sharedObjects);
+        SetObjects(crystalOff, !crystalReady, sharedObjects);
 
-            Ways.transform.position = new Vector3(currentX, currentY, Ways.transform.position.z);
-
-            HandleRocketAnimation();
         }
-        else if (isCrtystalDetected == false)
+        SetObjects(telescopeOn, telescopeReady, sharedObjects);
+        SetObjects(telescopeOff, !telescopeReady, sharedObjects);
+    }
+
+    private void SetObjects(
+        GameObject[] objects,
+        bool active,
+        HashSet<GameObject> ignoredObjects)
+    {
+        foreach (GameObject obj in objects)
         {
-            notDetected.SetActive(true);
+            if (obj != null && !ignoredObjects.Contains(obj))
+            {
+                obj.SetActive(active);
+            }
         }
     }
 
-    private void HandleRocketAnimation()
+    private bool ContainsObject(
+        GameObject[] objects,
+        GameObject target)
     {
-        if (rocket == null) return;
-
-        float speedFactor = isFastActive ? fastShakeSpeed : normalShakeSpeed;
-        float magnitudeFactor = isFastActive ? fastShakeMagnitude : normalShakeMagnitude;
-
-        noiseTimer += Time.deltaTime * speedFactor;
-
-        float noiseX = (Mathf.PerlinNoise(noiseTimer, 0f) - 0.5f) * magnitudeFactor;
-        float noiseY = (Mathf.PerlinNoise(0f, noiseTimer) - 0.5f) * magnitudeFactor;
-
-        rocket.transform.position = rocketStartPosition + new Vector3(noiseX, noiseY, 0f);
-    }
-
-    public void OnLeftButtonClick()
-    {
-        if (!GameIsActive || !isCrtystalDetected || Ways == null) return;
-        targetHorizontalPos += stepDistance;
-    }
-
-    public void OnRightButtonClick()
-    {
-        if (!GameIsActive || !isCrtystalDetected || Ways == null) return;
-        targetHorizontalPos -= stepDistance;
-    }
-
-    public void OnFastButtonClick()
-    {
-        if (!GameIsActive || !isCrtystalDetected) return;
-        currentVerticalSpeed = WaysFastVerticalSpeed;
-        fastTimer = fastDuration;
-        isFastActive = true;
-    }
-
-    void OnMouseDown()
-    {
-        if (requiresZoom)
+        foreach (GameObject obj in objects)
         {
-            if (!ZoomManager.Instance.IsZoomed) return;
-            if (Time.time - ZoomManager.Instance.ZoomStartTime < minZoomTime) return;
+            if (obj == target)
+            {
+                return true;
+            }
         }
 
-        miniGamePanel.SetActive(true);
-        GameIsActive = true;
+        return false;
     }
 
-    private void Crystal()
+    private bool BothItemsReady()
     {
-        isCrtystalDetected = true;
+        return crystalReady && telescopeReady;
     }
 
-    private void OnMiniGameWallDetected()
+    private bool ZoomReady()
     {
-        //UnityEngine.Debug.Log("Wall Detected");
-        GameIsActive = false;
-        miniGamePanel.SetActive(false);
-        ResetMiniGame();
-    }
-
-    private void OnTrueWallDetected()
-    {
-        currentTrueWallCount++;
-
-        if (currentTrueWallCount >= requiredTrueWallCount)
+        if (!needsZoom)
         {
-            UnityEngine.Debug.Log("gone through all true ways");
-            stepDistance = 0f;
+            return true;
+        }
+
+        if (ZoomManager.Instance == null)
+        {
+            return false;
+        }
+
+        if (!ZoomManager.Instance.IsZoomed)
+        {
+            return false;
+        }
+
+        return Time.time - ZoomManager.Instance.ZoomStartTime >= zoomDelay;
+    }
+
+    private void SaveButton(Collider button)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        buttonSizes[button] = button.transform.localScale;
+        buttonPositions[button] = button.transform.localPosition;
+    }
+
+    private Collider FindButton()
+    {
+        if (gameCamera == null || Mouse.current == null)
+        {
+            return null;
+        }
+
+        Ray ray = gameCamera.ScreenPointToRay(
+            Mouse.current.position.ReadValue()
+        );
+
+        RaycastHit[] hits = Physics.RaycastAll(
+            ray,
+            buttonDistance,
+            ~0,
+            QueryTriggerInteraction.Collide
+        );
+
+        Collider foundButton = null;
+        float closestDistance = Mathf.Infinity;
+
+        foreach (RaycastHit hit in hits)
+        {
+            bool isButton =
+                hit.collider == leftButton ||
+                hit.collider == rightButton ||
+                hit.collider == forwardButton;
+
+            if (!isButton)
+            {
+                continue;
+            }
+
+            if (hit.distance < closestDistance)
+            {
+                closestDistance = hit.distance;
+                foundButton = hit.collider;
+            }
+        }
+
+        return foundButton;
+    }
+
+    private void ButtonClicked(Collider button, bool canPlay)
+    {
+        StartCoroutine(ClickEffect(button));
+
+        if (!canPlay || rocket == null)
+        {
+            return;
+        }
+
+        if (button == leftButton)
+        {
+            rocket.TryTurnLeft();
+        }
+        else if (button == rightButton)
+        {
+            rocket.TryTurnRight();
+        }
+        else if (button == forwardButton)
+        {
+            rocket.TryMoveForward();
         }
     }
 
-    public void OnMiniGameExitButtonClicked()
+    private IEnumerator ClickEffect(Collider button)
     {
-        miniGamePanel.SetActive(false);
-        ResetMiniGame();
+        clickedButton = button;
+
+        yield return new WaitForSeconds(clickTime);
+
+        if (clickedButton == button)
+        {
+            clickedButton = null;
+        }
     }
 
-    private void ResetMiniGame()
+    private void AnimateButton(Collider button)
     {
-        if (Ways != null)
+        if (button == null)
         {
-            Ways.transform.position = waysStartPosition;
-            targetHorizontalPos = waysStartPosition.x;
+            return;
         }
 
-        if (rocket != null)
+        if (!buttonSizes.ContainsKey(button) ||
+            !buttonPositions.ContainsKey(button))
         {
-            rocket.transform.position = rocketStartPosition;
-            rocket.transform.rotation = Quaternion.identity;
+            return;
         }
 
-        noiseTimer = 0f;
-        fastTimer = 0f;
-        horizontalVelocity = 0f;
-        isFastActive = false;
-        currentVerticalSpeed = WaysNormalVerticalSpeed;
-        currentTrueWallCount = 0;
+        Vector3 normalSize = buttonSizes[button];
+        Vector3 normalPosition = buttonPositions[button];
+
+        Vector3 targetSize = normalSize;
+        Vector3 targetPosition = normalPosition;
+
+        float speed = hoverSpeed;
+
+        if (clickedButton == button)
+        {
+            targetSize = normalSize * clickSize;
+
+            Vector3 pressDirection =
+                -(button.transform.localRotation * Vector3.forward);
+
+            targetPosition =
+                normalPosition +
+                pressDirection * clickDepth;
+
+            speed = clickSpeed;
+        }
+        else if (hoverButton == button)
+        {
+            targetSize = normalSize * hoverSize;
+        }
+
+        button.transform.localScale = Vector3.Lerp(
+            button.transform.localScale,
+            targetSize,
+            Time.deltaTime * speed
+        );
+
+        button.transform.localPosition = Vector3.Lerp(
+            button.transform.localPosition,
+            targetPosition,
+            Time.deltaTime * speed
+        );
+    }
+
+    private void RocketHit(Collider other)
+    {
+        if (!gameStarted ||
+            gameFinished ||
+            levels.Count == 0)
+        {
+            return;
+        }
+
+        Level level = levels[currentLevel];
+
+        if (other == level.WinArea)
+        {
+            NextLevel();
+            return;
+        }
+
+        if (level.Obstacles == null)
+        {
+            return;
+        }
+
+        Transform hit = other.transform;
+
+        if (hit == level.Obstacles ||
+            hit.IsChildOf(level.Obstacles))
+        {
+            Respawn();
+        }
+    }
+
+    private void NextLevel()
+    {
+        int nextLevel = currentLevel + 1;
+
+        if (nextLevel >= levels.Count)
+        {
+            gameFinished = true;
+
+            if (rocket != null)
+            {
+                rocket.SetControlEnabled(false);
+            }
+
+            if (levelText != null)
+            {
+                levelText.text = "Completed";
+            }
+
+            return;
+        }
+
+        SetLevel(nextLevel);
+    }
+
+    private void SetLevel(int levelNumber)
+    {
+        currentLevel = levelNumber;
+        gameFinished = false;
+
+        for (int i = 0; i < levels.Count; i++)
+        {
+            if (levels[i].LevelObject != null)
+            {
+                levels[i].LevelObject.SetActive(
+                    i == currentLevel
+                );
+            }
+        }
+
+        if (levelText != null)
+        {
+            levelText.text =
+                "Level " + (currentLevel + 1);
+        }
+
+        Respawn();
+    }
+
+    private void Respawn()
+    {
+        if (levels.Count == 0 || rocket == null)
+        {
+            return;
+        }
+
+        Level level = levels[currentLevel];
+
+        if (level.SpawnPoint == null)
+        {
+            return;
+        }
+
+        rocket.ResetRocket(
+            level.SpawnPoint.position,
+            level.SpawnPoint.rotation
+        );
     }
 }

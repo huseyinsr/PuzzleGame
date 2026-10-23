@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: RedBookMapping
   m_EditorClassIdentifier: 
   item: {fileID: 11400000, guid: 7b1005d3f4a5fd74c8730ec92813a482, type: 2}
-  prefab: {fileID: 8279873449914859920, guid: 5f33df7048e4e424da6b91dd7249b332, type: 3}
+  prefab: {fileID: 1347154867776764801, guid: 69a697589af6c324f87ee89afa3e4df9, type: 3}

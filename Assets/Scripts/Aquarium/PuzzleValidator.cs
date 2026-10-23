@@ -1,21 +1,35 @@
+
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class PuzzleValidator : MonoBehaviour
 {
     [SerializeField] private StunPuzzleManager stunPuzzleManager;
 
+    public static event Action PuzzleSolved;
+
+    public static bool IsPuzzleFinished { get; private set; }
+
     public bool IsPuzzleSolved { get; private set; }
 
     private bool previousStunState;
     private bool previousItemState;
-    private bool previousPuzzleState;
+
+    private void Awake()
+    {
+        IsPuzzleFinished = false;
+    }
 
     private void Update()
     {
-        bool stunOrderCorrect = stunPuzzleManager.AllStunsAreInCorrectPosition;
-        bool itemOrderCorrect = CheckItems();
+        if (IsPuzzleSolved || stunPuzzleManager == null)
+            return;
 
-        IsPuzzleSolved = stunOrderCorrect && itemOrderCorrect;
+        bool stunOrderCorrect =
+            stunPuzzleManager.AllStunsAreInCorrectPosition;
+
+        bool itemOrderCorrect = CheckItems();
 
         if (stunOrderCorrect && !previousStunState)
             Debug.Log("All stuns are in the correct positions");
@@ -23,49 +37,56 @@ public class PuzzleValidator : MonoBehaviour
         if (itemOrderCorrect && !previousItemState)
             Debug.Log("All items are on the correct stuns");
 
-        if (IsPuzzleSolved && !previousPuzzleState)
-            Debug.Log("Puzzle solved");
-
         previousStunState = stunOrderCorrect;
         previousItemState = itemOrderCorrect;
-        previousPuzzleState = IsPuzzleSolved;
+
+        if (!stunOrderCorrect || !itemOrderCorrect)
+            return;
+
+        IsPuzzleSolved = true;
+        IsPuzzleFinished = true;
+
+        Debug.Log("Puzzle solved!");
+
+        PuzzleSolved?.Invoke();
     }
 
     private bool CheckItems()
     {
-        bool allCorrect = true;
+        int expectedCount = stunPuzzleManager.StunCount;
 
-        ItemForStun[] items = Object.FindObjectsByType<ItemForStun>(FindObjectsSortMode.None);
+        if (expectedCount <= 0)
+            return false;
+
+        ItemForStun[] items =
+            FindObjectsByType<ItemForStun>(
+                FindObjectsSortMode.None
+            );
+
+        if (items.Length != expectedCount)
+            return false;
+
+        HashSet<StunPiece> matchedStuns =
+            new HashSet<StunPiece>();
 
         foreach (ItemForStun item in items)
         {
-            if (item.transform.parent == null)
-            {
-              //  Debug.Log(item.name + " is not on a stun");
-                allCorrect = false;
-                continue;
-            }
+            StunPiece stun =
+                item.GetComponentInParent<StunPiece>();
 
-            StunPiece stun = item.transform.parent.GetComponentInParent<StunPiece>();
+            if (stun == null || stun.ItemSocket == null)
+                return false;
 
-            if (stun == null)
-            {
-                //Debug.Log(item.name + " is not on a stun");
-                allCorrect = false;
-                continue;
-            }
+            if (!item.transform.IsChildOf(stun.ItemSocket))
+                return false;
 
-            if (item.ItemID == stun.CorrectOrder)
-            {
-                //Debug.Log(item.name + " is on the correct stun");
-            }
-            else
-            {
-               // Debug.Log(item.name + " is on the wrong stun");
-                allCorrect = false;
-            }
+            if (item.ItemID != stun.CorrectOrder)
+                return false;
+
+            if (!matchedStuns.Add(stun))
+                return false;
         }
 
-        return allCorrect;
+        return matchedStuns.Count == expectedCount;
     }
 }

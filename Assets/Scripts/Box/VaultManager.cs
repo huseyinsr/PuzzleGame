@@ -6,13 +6,10 @@ public class VaultManager : MonoBehaviour
     [SerializeField] private VaultBox[] boxes;
     [SerializeField] private int[] correctNumbers;
 
+    [Header("Door")]
     [SerializeField] private Transform door;
-
-    [SerializeField] private Transform doorTarget;
-    [SerializeField] private float doorOpenSpeed = 1f;
-
-    private Vector3 doorClosedPosition;
-    private Quaternion doorClosedRotation;
+    [SerializeField] private float openAngle = 100f;
+    [SerializeField] private float openDuration = 1.5f;
 
     private bool doorIsOpen;
 
@@ -20,51 +17,54 @@ public class VaultManager : MonoBehaviour
     {
         foreach (var box in boxes)
             box.SetManager(this);
-
-        if (door != null)
-        {
-            doorClosedPosition = door.position;
-            doorClosedRotation = door.rotation;
-        }
     }
 
     public void CheckCombination()
     {
+        if (boxes.Length != correctNumbers.Length)
+            return;
+
         for (int i = 0; i < boxes.Length; i++)
         {
             if (boxes[i].CurrentNumber != correctNumbers[i])
                 return;
         }
 
-        if (!doorIsOpen)
+        if (!doorIsOpen && door != null)
         {
-            StartCoroutine(MoveDoorToTarget());
             doorIsOpen = true;
+            StartCoroutine(OpenDoor());
         }
     }
 
-    private IEnumerator MoveDoorToTarget()
+    private IEnumerator OpenDoor()
     {
-        if (doorTarget == null)
-            yield break;
+        Quaternion startRotation = door.localRotation;
 
-        Vector3 startPos = door.position;
-        Quaternion startRot = door.rotation;
+        Quaternion targetRotation =
+            startRotation * Quaternion.Euler(0, openAngle, 0);
 
-        Vector3 targetPos = doorTarget.position;
-        Quaternion targetRot = doorTarget.rotation;
+        float elapsed = 0f;
+        float duration = Mathf.Max(0.01f, openDuration);
 
-        float t = 0f;
-
-        while (t < 1f)
+        while (elapsed < duration)
         {
-            t += Time.deltaTime * doorOpenSpeed;
-            door.position = Vector3.Lerp(startPos, targetPos, t);
-            door.rotation = Quaternion.Slerp(startRot, targetRot, t);
+            elapsed += Time.deltaTime;
+
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            // Smooth opening
+            t = t * t * (3f - 2f * t);
+
+            door.localRotation = Quaternion.Slerp(
+                startRotation,
+                targetRotation,
+                t
+            );
+
             yield return null;
         }
 
-        door.position = targetPos;
-        door.rotation = targetRot;
+        door.localRotation = targetRotation;
     }
 }

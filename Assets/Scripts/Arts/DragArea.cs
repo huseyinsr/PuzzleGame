@@ -6,6 +6,7 @@ public class DragArea : MonoBehaviour
     [SerializeField] private Transform maxPoint;
     [SerializeField] private GameObject prefabToSpawn;
     [SerializeField] private Transform spawnPoint;
+    [SerializeField] private GameObject objectToHide;
 
     private bool hasSpawned = false;
 
@@ -21,9 +22,13 @@ public class DragArea : MonoBehaviour
 
     internal Vector3 Clamp(Vector3 position)
     {
-        position.x = Mathf.Clamp(position.x, minPoint.position.x, maxPoint.position.x);
-        position.y = Mathf.Clamp(position.y, minPoint.position.y, maxPoint.position.y);
-        position.z = Mathf.Clamp(position.z, minPoint.position.z, maxPoint.position.z);
+        Vector3 min = Vector3.Min(minPoint.position, maxPoint.position);
+        Vector3 max = Vector3.Max(minPoint.position, maxPoint.position);
+
+        position.x = Mathf.Clamp(position.x, min.x, max.x);
+        position.y = Mathf.Clamp(position.y, min.y, max.y);
+        position.z = Mathf.Clamp(position.z, min.z, max.z);
+
         return position;
     }
 
@@ -36,6 +41,8 @@ public class DragArea : MonoBehaviour
             Debug.LogWarning("Missing prefab or spawn point!");
             return;
         }
+        if (objectToHide != null)
+            objectToHide.SetActive(false);
 
         Instantiate(prefabToSpawn, spawnPoint.position, spawnPoint.rotation);
         hasSpawned = true;

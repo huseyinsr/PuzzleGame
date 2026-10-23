@@ -7,7 +7,7 @@
 
 ## Concept Arts
 
-I made 2d arts of 3d models that i want to have and i stareted to make tehm in belnder.
+I made 2d arts of 3d models that i want to have and i stareted to make them in belnder.
 
 <img src="https://github.com/user-attachments/assets/0fc5b6e8-6637-4d75-a479-a4599353e769" width="350"> <img src="https://github.com/user-attachments/assets/16654858-a4c6-4c34-a1c7-05fc2b5277be" width="350">
 

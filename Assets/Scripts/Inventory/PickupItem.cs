@@ -17,6 +17,7 @@ public class PickupItem : MonoBehaviour
         if (item != null && Inventory.Instance != null)
         {
             Inventory.Instance.AddItem(item);
+            SoundEffect.Instance?.PlayPickup();
             Destroy(gameObject);
         }
     }

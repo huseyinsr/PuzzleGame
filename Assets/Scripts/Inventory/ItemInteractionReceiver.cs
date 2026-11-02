@@ -69,6 +69,7 @@ public class ItemInteractionReceiver : MonoBehaviour
         usedSpawnFlags[spawnIndex] = true;
 
         Inventory.Instance.RemoveItem(selectedSlot);
+        SoundEffect.Instance?.PlayPlace();
     }
 
     private int GetNextFreeSpawnPointIndex()

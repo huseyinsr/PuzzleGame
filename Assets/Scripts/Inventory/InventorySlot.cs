@@ -42,6 +42,9 @@ public class InventorySlot : MonoBehaviour, IPointerClickHandler
         if (Inventory.Instance != null)
         {
             Inventory.Instance.OnSlotClicked(this);
+
+            if (!IsEmpty())
+                SoundEffect.Instance?.PlayInventory();
         }
     }
 }
